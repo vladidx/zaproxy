@@ -19,11 +19,13 @@
  */
 package org.zaproxy.zap.spider.parser;
 
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import net.htmlparser.jericho.Source;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.parosproxy.paros.network.HttpHeaderField;
 import org.parosproxy.paros.network.HttpMessage;
 import org.zaproxy.zap.spider.URLCanonicalizer;
 
@@ -40,7 +42,7 @@ public abstract class SpiderParser {
     /**
      * The Constant log.
      *
-     * @deprecated (2.10.0) Use {@link #getLogger()} instead.
+     * @deprecated (TODO add version) Use {@link #getLogger()} instead.
      */
     @Deprecated
     protected static final org.apache.log4j.Logger log =
@@ -52,7 +54,7 @@ public abstract class SpiderParser {
      * Gets the logger.
      *
      * @return the logger, never {@code null}.
-     * @since 2.10.0
+     * @since TODO add version
      */
     protected Logger getLogger() {
         return logger;
@@ -79,14 +81,40 @@ public abstract class SpiderParser {
     /**
      * Notify the listeners that a resource was found.
      *
+     * @param resourceFound the http message containing the response.
+     * @since 2.11.0
+     */
+    protected void notifyListenersResourceFound(SpiderResourceFound resourceFound) {
+        for (SpiderParserListener l : listeners) {
+            l.resourceFound(resourceFound);
+        }
+    }
+
+    /**
+     * Notify the listeners that a resource was found.
+     *
      * @param message the http message containing the response.
      * @param depth the depth of this resource in the crawling tree
      * @param uri the uri
      */
     protected void notifyListenersResourceFound(HttpMessage message, int depth, String uri) {
-        for (SpiderParserListener l : listeners) {
-            l.resourceURIFound(message, depth, uri);
-        }
+        notifyListenersResourceFound(message, depth, uri, new ArrayList<HttpHeaderField>());
+    }
+
+    /**
+     * Notify the listeners that a resource was found.
+     *
+     * @param message the http message containing the response.
+     * @param depth the depth of this resource in the crawling tree
+     * @param uri the uri
+     * @param requestHeaders list of custom request headers to be set by the spider task
+     * @since 2.11.0
+     */
+    protected void notifyListenersResourceFound(
+            HttpMessage message, int depth, String uri, List<HttpHeaderField> requestHeaders) {
+        SpiderResourceFound resourceFound = new SpiderResourceFound(message, depth, uri);
+        resourceFound.setRequestHeaders(requestHeaders);
+        notifyListenersResourceFound(resourceFound);
     }
 
     /**
@@ -100,9 +128,31 @@ public abstract class SpiderParser {
      */
     protected void notifyListenersPostResourceFound(
             HttpMessage message, int depth, String uri, String requestBody) {
-        for (SpiderParserListener l : listeners) {
-            l.resourcePostURIFound(message, depth, uri, requestBody);
-        }
+        notifyListenersPostResourceFound(
+                message, depth, uri, requestBody, new ArrayList<HttpHeaderField>());
+    }
+
+    /**
+     * Notify the listeners that a POST resource was found. You can read more about this call in the
+     * documentation for resourcePostURIFound in {@link SpiderParserListener}.
+     *
+     * @param message the http message containing the response.
+     * @param depth the depth of this resource in the crawling tree
+     * @param uri the uri
+     * @param requestBody the request body
+     * @param requestHeaders list of custom request headers to be set by the spider task
+     * @since 2.11.0
+     */
+    protected void notifyListenersPostResourceFound(
+            HttpMessage message,
+            int depth,
+            String uri,
+            String requestBody,
+            List<HttpHeaderField> requestHeaders) {
+        SpiderResourceFound resourceFound =
+                new SpiderResourceFound(message, depth, uri, requestBody);
+        resourceFound.setRequestHeaders(requestHeaders);
+        notifyListenersResourceFound(resourceFound);
     }
 
     /**
@@ -114,6 +164,25 @@ public abstract class SpiderParser {
      * @param baseURL the base url
      */
     protected void processURL(HttpMessage message, int depth, String localURL, String baseURL) {
+        processURL(message, depth, localURL, baseURL, new ArrayList<>());
+    }
+
+    /**
+     * Builds an url with custom headers and notifies the listeners.
+     *
+     * @param message the message
+     * @param depth the depth
+     * @param localURL the local url
+     * @param baseURL the base url
+     * @param requestHeaders list of custom request headers to be set by the spider task
+     * @since 2.11.0
+     */
+    protected void processURL(
+            HttpMessage message,
+            int depth,
+            String localURL,
+            String baseURL,
+            List<HttpHeaderField> requestHeaders) {
         // Build the absolute canonical URL
         String fullURL = URLCanonicalizer.getCanonicalURL(localURL, baseURL);
         if (fullURL == null) {
@@ -121,7 +190,7 @@ public abstract class SpiderParser {
         }
 
         log.debug("Canonical URL constructed using '" + localURL + "': " + fullURL);
-        notifyListenersResourceFound(message, depth + 1, fullURL);
+        notifyListenersResourceFound(message, depth + 1, fullURL, requestHeaders);
     }
 
     /**

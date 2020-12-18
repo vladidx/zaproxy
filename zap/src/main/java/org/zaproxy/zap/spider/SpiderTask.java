@@ -39,6 +39,7 @@ import org.parosproxy.paros.db.DatabaseException;
 import org.parosproxy.paros.extension.history.ExtensionHistory;
 import org.parosproxy.paros.model.HistoryReference;
 import org.parosproxy.paros.network.HttpHeader;
+import org.parosproxy.paros.network.HttpHeaderField;
 import org.parosproxy.paros.network.HttpMalformedHeaderException;
 import org.parosproxy.paros.network.HttpMessage;
 import org.parosproxy.paros.network.HttpRequestHeader;
@@ -46,6 +47,7 @@ import org.parosproxy.paros.network.HttpResponseHeader;
 import org.zaproxy.zap.spider.filters.ParseFilter;
 import org.zaproxy.zap.spider.filters.ParseFilter.FilterResult;
 import org.zaproxy.zap.spider.parser.SpiderParser;
+import org.zaproxy.zap.spider.parser.SpiderResourceFound;
 
 /** The SpiderTask representing a spidering task performed during the Spidering process. */
 public class SpiderTask implements Runnable {
@@ -76,73 +78,20 @@ public class SpiderTask implements Runnable {
 
     /**
      * Instantiates a new spider task using the target URI. The purpose of this task is to crawl the
-     * given uri, using the provided method, find any other uris in the fetched resource and create
-     * other tasks.
-     *
-     * @param parent the spider controlling the crawling process
-     * @param uri the uri that this task should process
-     * @param depth the depth where this uri is located in the spidering process
-     * @param method the HTTP method that should be used to fetch the resource
-     */
-    public SpiderTask(Spider parent, URI uri, int depth, String method) {
-        this(parent, null, uri, depth, method, null);
-    }
-
-    /**
-     * Instantiates a new spider task using the target URI. The purpose of this task is to crawl the
-     * given uri, using the provided method, find any other uris in the fetched resource and create
-     * other tasks.
-     *
-     * @param parent the spider controlling the crawling process
-     * @param sourceUri the URI where the given {@code uri} was found
-     * @param uri the uri that this task should process
-     * @param depth the depth where this uri is located in the spidering process
-     * @param method the HTTP method that should be used to fetch the resource
-     * @since 2.4.0
-     */
-    public SpiderTask(Spider parent, URI sourceUri, URI uri, int depth, String method) {
-        this(parent, sourceUri, uri, depth, method, null);
-    }
-
-    /**
-     * Instantiates a new spider task using the target URI. The purpose of this task is to crawl the
-     * given uri, using the provided method, find any other uris in the fetched resource and create
-     * other tasks.
+     * given uri, using the provided method and supplied request headers, find any other uris in the
+     * fetched resource and create other tasks.
      *
      * <p>The body of the request message is also provided in the {@literal requestBody} parameter
      * and will be used when fetching the resource from the specified uri.
      *
      * @param parent the spider controlling the crawling process
+     * @param resoureFound information about found resource
      * @param uri the uri that this task should process
-     * @param depth the depth where this uri is located in the spidering process
-     * @param method the HTTP method that should be used to fetch the resource
-     * @param requestBody the body of the request
+     * @since 2.11.0
      */
-    public SpiderTask(Spider parent, URI uri, int depth, String method, String requestBody) {
-        this(parent, null, uri, depth, method, requestBody);
-    }
-
-    /**
-     * Instantiates a new spider task using the target URI. The purpose of this task is to crawl the
-     * given uri, using the provided method, find any other uris in the fetched resource and create
-     * other tasks.
-     *
-     * <p>The body of the request message is also provided in the {@literal requestBody} parameter
-     * and will be used when fetching the resource from the specified uri.
-     *
-     * @param parent the spider controlling the crawling process
-     * @param sourceUri the URI where the given {@code uri} was found
-     * @param uri the uri that this task should process
-     * @param depth the depth where this uri is located in the spidering process
-     * @param method the HTTP method that should be used to fetch the resource
-     * @param requestBody the body of the request
-     * @since 2.4.0
-     */
-    public SpiderTask(
-            Spider parent, URI sourceUri, URI uri, int depth, String method, String requestBody) {
+    public SpiderTask(Spider parent, SpiderResourceFound resoureFound, URI uri) {
         super();
         this.parent = parent;
-        this.depth = depth;
 
         // Log the new task
         if (log.isDebugEnabled()) {
@@ -153,14 +102,29 @@ public class SpiderTask implements Runnable {
         // using
         // HistoryReference
         try {
-            HttpRequestHeader requestHeader = new HttpRequestHeader(method, uri, HttpHeader.HTTP11);
-            if (sourceUri != null && parent.getSpiderParam().isSendRefererHeader()) {
-                requestHeader.setHeader(HttpRequestHeader.REFERER, sourceUri.toString());
+            HttpRequestHeader requestHeader =
+                    new HttpRequestHeader(resoureFound.getMethod(), uri, HttpHeader.HTTP11);
+            if (resoureFound.getRequestHeaders() != null) {
+                // Intentionally adding supplied request headers before the referer header
+                // to prioritize "send referer header" option
+                for (HttpHeaderField header : resoureFound.getRequestHeaders()) {
+                    if (header != null && header.getName() != null && header.getValue() != null) {
+                        requestHeader.addHeader(header.getName(), header.getValue());
+                    }
+                }
+            }
+            if (resoureFound.getResponseMessage() != null
+                    && resoureFound.getResponseMessage().getRequestHeader() != null
+                    && resoureFound.getResponseMessage().getRequestHeader().getURI() != null
+                    && parent.getSpiderParam().isSendRefererHeader()) {
+                requestHeader.setHeader(
+                        HttpRequestHeader.REFERER,
+                        resoureFound.getResponseMessage().getRequestHeader().getURI().toString());
             }
             HttpMessage msg = new HttpMessage(requestHeader);
-            if (requestBody != null) {
-                msg.getRequestHeader().setContentLength(requestBody.length());
-                msg.setRequestBody(requestBody);
+            if (resoureFound.getBody() != null) {
+                msg.getRequestHeader().setContentLength(resoureFound.getBody().length());
+                msg.setRequestBody(resoureFound.getBody());
             }
             this.reference =
                     new HistoryReference(
