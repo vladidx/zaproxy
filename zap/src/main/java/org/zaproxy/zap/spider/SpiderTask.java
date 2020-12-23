@@ -68,8 +68,8 @@ public class SpiderTask implements Runnable {
      */
     private HistoryReference reference;
 
-    /** The depth of crawling where the uri was found. */
-    private int depth;
+    /** The spider resource found. */
+    private SpiderResourceFound resourceFound;
 
     private ExtensionHistory extHistory = null;
 
@@ -85,13 +85,14 @@ public class SpiderTask implements Runnable {
      * and will be used when fetching the resource from the specified uri.
      *
      * @param parent the spider controlling the crawling process
-     * @param resoureFound information about found resource
+     * @param resourceFound the spider resource found
      * @param uri the uri that this task should process
      * @since 2.11.0
      */
-    public SpiderTask(Spider parent, SpiderResourceFound resoureFound, URI uri) {
+    public SpiderTask(Spider parent, SpiderResourceFound resourceFound, URI uri) {
         super();
         this.parent = parent;
+        this.resourceFound = resourceFound;
 
         // Log the new task
         if (log.isDebugEnabled()) {
@@ -103,28 +104,26 @@ public class SpiderTask implements Runnable {
         // HistoryReference
         try {
             HttpRequestHeader requestHeader =
-                    new HttpRequestHeader(resoureFound.getMethod(), uri, HttpHeader.HTTP11);
-            if (resoureFound.getRequestHeaders() != null) {
+                    new HttpRequestHeader(resourceFound.getMethod(), uri, HttpHeader.HTTP11);
+            if (resourceFound.getRequestHeaders() != null) {
                 // Intentionally adding supplied request headers before the referer header
                 // to prioritize "send referer header" option
-                for (HttpHeaderField header : resoureFound.getRequestHeaders()) {
+                for (HttpHeaderField header : resourceFound.getRequestHeaders()) {
                     if (header != null && header.getName() != null && header.getValue() != null) {
                         requestHeader.addHeader(header.getName(), header.getValue());
                     }
                 }
             }
-            if (resoureFound.getResponseMessage() != null
-                    && resoureFound.getResponseMessage().getRequestHeader() != null
-                    && resoureFound.getResponseMessage().getRequestHeader().getURI() != null
+            if (resourceFound.getMessage() != null
                     && parent.getSpiderParam().isSendRefererHeader()) {
                 requestHeader.setHeader(
                         HttpRequestHeader.REFERER,
-                        resoureFound.getResponseMessage().getRequestHeader().getURI().toString());
+                        resourceFound.getMessage().getRequestHeader().getURI().toString());
             }
             HttpMessage msg = new HttpMessage(requestHeader);
-            if (resoureFound.getBody() != null) {
-                msg.getRequestHeader().setContentLength(resoureFound.getBody().length());
-                msg.setRequestBody(resoureFound.getBody());
+            if (resourceFound.getBody() != null) {
+                msg.getRequestHeader().setContentLength(resourceFound.getBody().length());
+                msg.setRequestBody(resourceFound.getBody());
             }
             this.reference =
                     new HistoryReference(
@@ -147,7 +146,7 @@ public class SpiderTask implements Runnable {
             if (log.isDebugEnabled()) {
                 log.debug(
                         "Spider Task Started. Processing uri at depth "
-                                + depth
+                                + resourceFound.getDepth()
                                 + " using already constructed message: "
                                 + reference.getURI());
             }
@@ -235,7 +234,7 @@ public class SpiderTask implements Runnable {
         parent.checkPauseAndWait();
 
         int maxDepth = parent.getSpiderParam().getMaxDepth();
-        if (maxDepth == SpiderParam.UNLIMITED_DEPTH || depth < maxDepth) {
+        if (maxDepth == SpiderParam.UNLIMITED_DEPTH || resourceFound.getDepth() < maxDepth) {
             parent.notifyListenersSpiderTaskResult(new SpiderTaskResult(msg));
             processResource(msg);
         } else {
@@ -385,7 +384,9 @@ public class SpiderTask implements Runnable {
             if (parser.canParseResource(message, path, alreadyConsumed)) {
                 if (log.isDebugEnabled())
                     log.debug("Parser " + parser + " can parse resource '" + path + "'");
-                if (parser.parseResource(message, source, depth)) alreadyConsumed = true;
+                if (parser.parseResource(message, source, resourceFound.getDepth())) {
+                    alreadyConsumed = true;
+                }
             } else {
                 if (log.isDebugEnabled())
                     log.debug("Parser " + parser + " cannot parse resource '" + path + "'");

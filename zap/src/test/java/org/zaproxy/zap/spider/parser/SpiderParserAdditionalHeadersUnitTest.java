@@ -54,11 +54,13 @@ import org.parosproxy.paros.network.ConnectionParam;
 import org.parosproxy.paros.network.HttpHeaderField;
 import org.parosproxy.paros.network.HttpMalformedHeaderException;
 import org.parosproxy.paros.network.HttpMessage;
+import org.parosproxy.paros.network.HttpRequestHeader;
 import org.zaproxy.zap.extension.spider.ExtensionSpider;
 import org.zaproxy.zap.spider.Spider;
 import org.zaproxy.zap.spider.SpiderController;
 import org.zaproxy.zap.spider.SpiderParam;
 import org.zaproxy.zap.spider.SpiderTask;
+import org.zaproxy.zap.spider.URLCanonicalizer;
 import org.zaproxy.zap.spider.parser.SpiderParserTestUtils.SpiderResource;
 import org.zaproxy.zap.spider.parser.SpiderParserTestUtils.TestSpiderParserListener;
 import org.zaproxy.zap.utils.I18N;
@@ -547,15 +549,28 @@ public class SpiderParserAdditionalHeadersUnitTest extends SpiderParserTestUtils
         public boolean parseResource(HttpMessage message, Source source, int depth) {
             for (int i = 0; i < numResourcesToSubmit; ++i) {
                 if (postWithBody) {
-                    notifyListenersPostResourceFound(
-                            message, depth, buildResourceUrl(i), buildBody(i), requestHeaders);
+                    notifyListenersResourceFound(
+                            SpiderResourceFound.builder()
+                                    .setMessage(message)
+                                    .setDepth(depth)
+                                    .setUri(buildResourceUrl(i))
+                                    .setMethod(HttpRequestHeader.POST)
+                                    .setBody(buildBody(i))
+                                    .setRequestHeaders(requestHeaders)
+                                    .build());
                 } else {
-                    processURL(
-                            message,
-                            depth,
-                            buildResourceUrl(i),
-                            message.getRequestHeader().getURI().getProtocolCharset(),
-                            requestHeaders);
+                    // URL canonicalization as processURL(...) doesn't support req. headers
+                    String url =
+                            URLCanonicalizer.getCanonicalURL(
+                                    buildResourceUrl(i),
+                                    message.getRequestHeader().getURI().toString());
+                    notifyListenersResourceFound(
+                            SpiderResourceFound.builder()
+                                    .setMessage(message)
+                                    .setDepth(depth)
+                                    .setUri(url)
+                                    .setRequestHeaders(requestHeaders)
+                                    .build());
                 }
             }
             return true;

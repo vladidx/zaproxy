@@ -30,6 +30,7 @@ import java.util.List;
 import net.htmlparser.jericho.Source;
 import org.parosproxy.paros.network.HttpHeaderField;
 import org.parosproxy.paros.network.HttpMessage;
+import org.parosproxy.paros.network.HttpRequestHeader;
 import org.zaproxy.zap.spider.SpiderParam;
 import org.zaproxy.zap.testutils.TestUtils;
 import org.zaproxy.zap.utils.ZapXmlConfiguration;
@@ -109,7 +110,12 @@ public class SpiderParserTestUtils extends TestUtils {
     }
 
     public static SpiderResource uriResource(HttpMessage message, int depth, String uri) {
-        return new SpiderResource(new SpiderResourceFound(message, depth, uri));
+        return new SpiderResource(
+                SpiderResourceFound.builder()
+                        .setMessage(message)
+                        .setDepth(depth)
+                        .setUri(uri)
+                        .build());
     }
 
     public static SpiderResource uriResource(
@@ -123,9 +129,14 @@ public class SpiderParserTestUtils extends TestUtils {
             String uri,
             boolean shouldIgnore,
             List<HttpHeaderField> requestHeaders) {
-        SpiderResourceFound resourceFound = new SpiderResourceFound(message, depth, uri);
-        resourceFound.setShouldIgnore(shouldIgnore);
-        resourceFound.setRequestHeaders(requestHeaders);
+        SpiderResourceFound resourceFound =
+                SpiderResourceFound.builder()
+                        .setMessage(message)
+                        .setDepth(depth)
+                        .setUri(uri)
+                        .setShouldIgnore(shouldIgnore)
+                        .setRequestHeaders(requestHeaders)
+                        .build();
         return new SpiderResource(resourceFound);
     }
 
@@ -141,8 +152,13 @@ public class SpiderParserTestUtils extends TestUtils {
             String requestBody,
             List<HttpHeaderField> requestHeaders) {
         SpiderResourceFound resourceFound =
-                new SpiderResourceFound(message, depth, uri, requestBody);
-        resourceFound.setRequestHeaders(requestHeaders);
+                SpiderResourceFound.builder()
+                        .setMessage(message)
+                        .setDepth(depth)
+                        .setUri(uri)
+                        .setMethod(HttpRequestHeader.POST)
+                        .setBody(requestBody)
+                        .build();
         return new SpiderResource(resourceFound);
     }
 
@@ -179,7 +195,7 @@ public class SpiderParserTestUtils extends TestUtils {
         }
 
         public HttpMessage getMessage() {
-            return resourceFound.getResponseMessage();
+            return resourceFound.getMessage();
         }
 
         public int getDepth() {

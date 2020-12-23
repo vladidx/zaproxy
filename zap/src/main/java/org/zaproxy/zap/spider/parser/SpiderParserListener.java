@@ -29,7 +29,7 @@ public interface SpiderParserListener {
 
     /**
      * Event triggered when a new resource is found. The resourceFound contains all the required
-     * information about the resource (original message, URI, depth, method, etc.).
+     * information about the resource (source message, URI, depth, method, etc.).
      *
      * @param resourceFound definition of found spider resource
      */

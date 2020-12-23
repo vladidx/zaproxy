@@ -31,8 +31,6 @@ import org.apache.commons.httpclient.URIException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.parosproxy.paros.network.HttpHeaderField;
-import org.parosproxy.paros.network.HttpMessage;
-import org.parosproxy.paros.network.HttpRequestHeader;
 import org.zaproxy.zap.spider.filters.FetchFilter;
 import org.zaproxy.zap.spider.filters.FetchFilter.FetchStatus;
 import org.zaproxy.zap.spider.filters.ParseFilter;
@@ -163,13 +161,9 @@ public class SpiderController implements SpiderParserListener {
      * @param method the http method used for fetching the resource
      */
     protected void addSeed(URI uri, String method) {
+        SpiderResourceFound resourceFound =
+                SpiderResourceFound.builder().setUri(uri.toString()).setMethod(method).build();
         // Check if the uri was processed already
-        SpiderResourceFound resourceFound;
-        if (HttpRequestHeader.GET.equalsIgnoreCase(method)) {
-            resourceFound = new SpiderResourceFound((HttpMessage) null, 0, uri.toString());
-        } else {
-            resourceFound = new SpiderResourceFound((HttpMessage) null, 0, uri.toString(), "");
-        }
         String resourceIdentifier = "";
         try {
             resourceIdentifier = buildCanonicalResourceIdentifier(uri, resourceFound);
@@ -266,33 +260,25 @@ public class SpiderController implements SpiderParserListener {
     private String buildCanonicalResourceIdentifier(URI uri, SpiderResourceFound resourceFound)
             throws URIException {
         StringBuilder identifierBuilder = new StringBuilder(50);
-        if (resourceFound != null) {
-            String visitedURI =
-                    URLCanonicalizer.buildCleanedParametersURIRepresentation(
-                            uri,
-                            spider.getSpiderParam().getHandleParameters(),
-                            spider.getSpiderParam().isHandleODataParametersVisited());
-            identifierBuilder.append(resourceFound.getMethod());
-            identifierBuilder.append(" ");
-            identifierBuilder.append(visitedURI);
-            identifierBuilder.append("\n");
-            String canonicalHeaderRepresentation =
-                    getCanonicalHeadersString(resourceFound.getRequestHeaders());
-            identifierBuilder.append("\n");
-            identifierBuilder.append(resourceFound.getBody());
-        }
+        String visitedURI =
+                URLCanonicalizer.buildCleanedParametersURIRepresentation(
+                        uri,
+                        spider.getSpiderParam().getHandleParameters(),
+                        spider.getSpiderParam().isHandleODataParametersVisited());
+        identifierBuilder.append(resourceFound.getMethod());
+        identifierBuilder.append(" ");
+        identifierBuilder.append(visitedURI);
+        identifierBuilder.append("\n");
+        String canonicalHeaderRepresentation =
+                getCanonicalHeadersString(resourceFound.getRequestHeaders());
+        identifierBuilder.append("\n");
+        identifierBuilder.append(resourceFound.getBody());
         return identifierBuilder.toString();
     }
 
     @Override
     public void resourceFound(SpiderResourceFound resourceFound) {
-        if (resourceFound == null
-                || resourceFound.getUri() == null
-                || resourceFound.getMethod() == null) {
-            return;
-        }
-
-        log.debug("New " + resourceFound.getMethod() + "resource found: " + resourceFound.getUri());
+        log.debug("New {} resource found: {}", resourceFound.getMethod(), resourceFound.getUri());
 
         // Create the uri
         URI uriV = createURI(resourceFound.getUri());
@@ -309,7 +295,7 @@ public class SpiderController implements SpiderParserListener {
         }
         synchronized (visitedResources) {
             if (visitedResources.contains(resourceIdentifier)) {
-                // log.debug("URI already visited: " + visitedURI);
+                log.debug("Resource already visited: {}", resourceIdentifier.trim());
                 return;
             } else {
                 visitedResources.add(resourceIdentifier);
@@ -347,25 +333,16 @@ public class SpiderController implements SpiderParserListener {
     }
 
     /**
-     * Checks whether the value exists in an ArrayList of certain key.
+     * Builds a canonical string representation for HTTP header fields.
      *
      * @param headers list of HTTP headers
      * @return canonical string representation of headers
      */
     private String getCanonicalHeadersString(List<HttpHeaderField> headers) {
-        if (headers != null && !headers.isEmpty()) {
-            headers.removeIf(
-                    h ->
-                            h == null
-                                    || h.getName() == null
-                                    || h.getName().trim().isEmpty()
-                                    || h.getValue() == null);
-            return headers.stream()
-                    .sorted((h1, h2) -> h1.getName().compareTo(h2.getName()))
-                    .map(h -> h.getName().trim() + "=" + h.getValue().trim())
-                    .collect(Collectors.joining("|"));
-        }
-        return "";
+        return headers.stream()
+                .sorted((h1, h2) -> h1.getName().compareTo(h2.getName()))
+                .map(h -> h.getName().trim() + "=" + h.getValue().trim())
+                .collect(Collectors.joining("|"));
     }
 
     /**
